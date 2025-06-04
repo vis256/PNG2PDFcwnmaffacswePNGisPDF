@@ -1,0 +1,347 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>PNG2PDFcwnmaffacswePNGisPDF</title>
+    <style>
+      @import url("https://fonts.googleapis.com/css2?family=Pacifico&family=Fredoka+One&display=swap");
+
+      body {
+        font-family: "Fredoka One", cursive; /* Cute, bold font */
+        margin: 0;
+        padding: 20px;
+        background-image: url("background.png");
+        background-size: cover;
+        background-position: center;
+        color: #6d4c41; /* Darker brown for text, for contrast */
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        min-height: 100vh;
+        box-sizing: border-box;
+      }
+
+      h1 {
+        text-align: center;
+        color: #ff69b4; /* Hot pink */
+        font-family: "Pacifico", cursive; /* Flowy, cute font for title */
+        font-size: 3.5em; /* Larger title */
+        text-shadow: 2px 2px 4px rgba(255, 105, 180, 0.3); /* Softer pink shadow */
+        margin-bottom: 10px;
+      }
+
+      p {
+        text-align: center;
+        color: #ff85c0; /* Lighter, soft pink */
+        font-size: 1.2em;
+        margin-bottom: 30px;
+      }
+
+      .container {
+        background-color: #fff0f5e0; /* Lavender blush - very light pink */
+        padding: 35px;
+        border-radius: 30px; /* More rounded corners */
+        box-shadow: 0 8px 25px rgba(255, 105, 180, 1); /* Pink shadow */
+        margin: 20px auto;
+      }
+
+      input[type="file"],
+      button {
+        display: block;
+        margin: 20px auto; /* Center align */
+        padding: 18px;
+        border-radius: 25px; /* Very rounded */
+        border: 2px solid #ffb6c1; /* Light pink border */
+        font-family: "Fredoka One", cursive;
+        font-size: 1.1em;
+      }
+
+      input[type="file"] {
+        width: calc(100% - 40px); /* Adjust width considering padding */
+        background-color: #fffafa; /* Snow white */
+        color: #ff69b4;
+        cursor: pointer;
+      }
+
+      input[type="file"]::file-selector-button {
+        background-color: #ff69b4; /* Hot pink */
+        color: white;
+        padding: 10px 15px;
+        border: none;
+        border-radius: 20px;
+        font-family: "Fredoka One", cursive;
+        cursor: pointer;
+        transition: background-color 0.3s ease, transform 0.2s ease;
+      }
+
+      input[type="file"]::file-selector-button:hover {
+        background-color: #ff1493; /* Deep pink */
+        transform: scale(1.05);
+      }
+
+      button {
+        background-color: #ff69b4; /* Hot pink */
+        color: white;
+        cursor: pointer;
+        font-size: 1.3em; /* Bolder button text */
+        font-weight: bold;
+        transition: background-color 0.3s ease, transform 0.2s ease;
+        box-shadow: 0 4px 10px rgba(255, 20, 147, 0.3); /* Button shadow */
+      }
+
+      button:hover {
+        background-color: #ff1493; /* Deep pink */
+        transform: scale(1.05); /* Cute hover effect */
+      }
+
+      button:disabled {
+        background-color: #f8bbd0; /* Lighter pink for disabled */
+        color: #ffffff;
+        cursor: not-allowed;
+        box-shadow: none;
+        transform: none;
+      }
+
+      #status {
+        margin-top: 25px;
+        font-style: italic;
+        color: #c2185b; /* Darker pink for status */
+        font-size: 1.1em;
+        text-align: center;
+        min-height: 30px; /* Ensure space for messages */
+      }
+
+      .loader {
+        border: 6px solid #ffe4e1; /* Light pink */
+        border-top: 6px solid #ff69b4; /* Hot pink */
+        border-radius: 50%;
+        width: 50px; /* Bigger loader */
+        height: 50px;
+        animation: spin 1.5s linear infinite; /* Slightly slower, more dramatic spin */
+        margin: 20px auto;
+        display: none; /* Hidden by default */
+      }
+
+      @keyframes spin {
+        0% {
+          transform: rotate(0deg) scale(1);
+        }
+        50% {
+          transform: rotate(180deg) scale(1.1); /* Add a little pulse */
+        }
+        100% {
+          transform: rotate(360deg) scale(1);
+        }
+      }
+
+      #fileListContainer {
+        margin-top: 20px;
+        padding: 15px;
+        border: 2px dotted #ff85c0; /* Dotted pink border */
+        border-radius: 15px;
+        background-color: #fffafa; /* Snow white */
+        max-height: 180px;
+        overflow-y: auto;
+      }
+
+      #fileListContainer h3 {
+        margin-top: 0;
+        font-size: 1.2em;
+        color: #ff69b4; /* Hot pink */
+        text-align: center;
+        margin-bottom: 10px;
+      }
+
+      #fileListContainer ul {
+        list-style-type: "❤ "; /* Cute list bullet */
+        padding-left: 20px;
+        margin: 0;
+      }
+
+      #fileListContainer li {
+        font-size: 1em;
+        color: #6d4c41; /* Darker brown for readability */
+        padding: 5px 0;
+        border-bottom: 1px dashed #ffe4e1; /* Light pink separator */
+      }
+      #fileListContainer li:last-child {
+        border-bottom: none;
+      }
+
+      #fileListContainer li[style*="color: orange"] {
+        /* Style for skipped files */
+        color: #ff7f50 !important; /* Coral, more vibrant */
+        font-style: italic;
+      }
+    </style>
+    <script src="jspdf.umd.min.js"></script>
+    <script src="jszip.min.js"></script>
+  </head>
+  <body>
+    <div class="container">
+      <h1>PNG2PDFcwnmaffacswePNGisPDF</h1>
+      <p>
+        PNG 2 PDF converter with no margins and fully free and client sided
+        where each PNG is separate PDF
+      </p>
+
+      <input type="file" id="pngUpload" multiple accept=".png" />
+
+      <div id="fileListContainer" style="display: none">
+        <h3>Selected Files:</h3>
+        <ul id="selectedFilesList"></ul>
+      </div>
+
+      <button id="convertBtn">Convert & Download ZIP</button>
+      <div class="loader" id="loader"></div>
+      <div id="status"></div>
+    </div>
+
+    <script>
+      const pngUploadInput = document.getElementById("pngUpload");
+      const convertBtn = document.getElementById("convertBtn");
+      const statusDiv = document.getElementById("status");
+      const loader = document.getElementById("loader");
+      const fileListContainer = document.getElementById("fileListContainer");
+      const selectedFilesList = document.getElementById("selectedFilesList");
+
+      pngUploadInput.addEventListener("change", function () {
+        selectedFilesList.innerHTML = ""; // Clear previous list
+        statusDiv.textContent = ""; // Clear any previous status messages
+        loader.style.display = "none"; // Hide loader if it was visible
+        convertBtn.disabled = false; // Ensure button is enabled
+
+        if (this.files.length > 0) {
+          fileListContainer.style.display = "block";
+          for (let i = 0; i < this.files.length; i++) {
+            const file = this.files[i];
+            if (file.type === "image/png") {
+              const listItem = document.createElement("li");
+              listItem.textContent = file.name;
+              selectedFilesList.appendChild(listItem);
+            } else {
+              const listItem = document.createElement("li");
+              listItem.textContent = `${file.name} (not a PNG, will be skipped)`;
+              listItem.style.color = "orange";
+              selectedFilesList.appendChild(listItem);
+            }
+          }
+        } else {
+          fileListContainer.style.display = "none";
+        }
+      });
+
+      convertBtn.addEventListener("click", async function () {
+        const files = pngUploadInput.files;
+
+        if (files.length === 0) {
+          statusDiv.textContent = "Please select at least one PNG file.";
+          return;
+        }
+
+        statusDiv.textContent = "Processing...";
+        loader.style.display = "block";
+        convertBtn.disabled = true;
+        fileListContainer.style.display = "none"; // Hide file list during processing
+
+        const { jsPDF } = window.jspdf;
+        const zip = new JSZip();
+        let pdfCount = 0;
+        let processedFileNames = []; // To keep track of files actually being processed as PDFs
+
+        for (let i = 0; i < files.length; i++) {
+          const file = files[i];
+          if (file.type !== "image/png") {
+            statusDiv.textContent = `Skipping non-PNG file: ${file.name}`;
+            await new Promise((resolve) => setTimeout(resolve, 50)); // small delay for UI update
+            continue;
+          }
+
+          processedFileNames.push(file.name);
+          statusDiv.textContent = `Processing ${file.name}... (${processedFileNames.length}/${files.length})`;
+
+          try {
+            const imageBitmap = await createImageBitmap(file);
+            const imgWidth = imageBitmap.width;
+            const imgHeight = imageBitmap.height;
+
+            const pdf = new jsPDF({
+              orientation: imgWidth > imgHeight ? "l" : "p",
+              unit: "px",
+              format: [imgWidth, imgHeight],
+            });
+
+            const reader = new FileReader();
+            const promise = new Promise((resolve, reject) => {
+              reader.onload = function (event) {
+                const imgData = event.target.result;
+                pdf.addImage(imgData, "PNG", 0, 0, imgWidth, imgHeight);
+                const pdfOutput = pdf.output("blob");
+                const pdfFileName =
+                  file.name.substring(0, file.name.lastIndexOf(".")) + ".pdf";
+                zip.file(pdfFileName, pdfOutput);
+                pdfCount++;
+                resolve();
+              };
+              reader.onerror = reject;
+            });
+            reader.readAsDataURL(file);
+            await promise;
+          } catch (error) {
+            console.error("Error processing file:", file.name, error);
+            statusDiv.innerHTML += `<br>Error converting ${file.name}: ${error.message}`; // Use innerHTML for line breaks
+          }
+        }
+
+        // Update status based on actual PNGs processed
+        const actualPngFilesCount = processedFileNames.length;
+        if (pdfCount > 0 && pdfCount === actualPngFilesCount) {
+          statusDiv.textContent = `Generating ZIP file with ${pdfCount} PDF(s)...`;
+        } else if (pdfCount > 0 && pdfCount < actualPngFilesCount) {
+          statusDiv.textContent = `Successfully converted ${pdfCount} of ${actualPngFilesCount} PNGs. Generating ZIP file...`;
+        } else if (actualPngFilesCount > 0 && pdfCount === 0) {
+          statusDiv.textContent = `Could not convert any of the ${actualPngFilesCount} selected PNG files.`;
+          loader.style.display = "none";
+          convertBtn.disabled = false;
+          pngUploadInput.value = ""; // Clear file input
+          selectedFilesList.innerHTML = ""; // Clear selected files list
+          fileListContainer.style.display = "none";
+          return;
+        } else {
+          // No PNGs were selected or found
+          statusDiv.textContent = "No valid PNG files were processed.";
+          loader.style.display = "none";
+          convertBtn.disabled = false;
+          pngUploadInput.value = ""; // Clear file input
+          selectedFilesList.innerHTML = ""; // Clear selected files list
+          fileListContainer.style.display = "none";
+          return;
+        }
+
+        if (pdfCount > 0) {
+          try {
+            const zipBlob = await zip.generateAsync({ type: "blob" });
+            const link = document.createElement("a");
+            link.href = URL.createObjectURL(zipBlob);
+            link.download = "converted_pngs.zip";
+            document.body.appendChild(link);
+            link.click();
+            document.body.removeChild(link);
+            URL.revokeObjectURL(link.href);
+            statusDiv.textContent = `Successfully converted ${pdfCount} PNG(s).`;
+          } catch (error) {
+            console.error("Error generating ZIP:", error);
+            statusDiv.textContent = "Error generating ZIP file.";
+          }
+        }
+
+        loader.style.display = "none";
+        convertBtn.disabled = false;
+        pngUploadInput.value = ""; // Clear file input
+        selectedFilesList.innerHTML = ""; // Clear selected files list
+        // fileListContainer.style.display = 'none'; // Keep it hidden or clear status
+      });
+    </script>
+  </body>
+</html>
