@@ -177,6 +177,8 @@
     </style>
     <script src="jspdf.umd.min.js"></script>
     <script src="jszip.min.js"></script>
+    <script src="pako.min.js"></script>
+    <script src="UPNG.js"></script>
   </head>
   <body>
     <div class="container">
@@ -207,25 +209,23 @@
       const selectedFilesList = document.getElementById("selectedFilesList");
 
       pngUploadInput.addEventListener("change", function () {
-        selectedFilesList.innerHTML = ""; // Clear previous list
-        statusDiv.textContent = ""; // Clear any previous status messages
-        loader.style.display = "none"; // Hide loader if it was visible
-        convertBtn.disabled = false; // Ensure button is enabled
+        selectedFilesList.innerHTML = "";
+        statusDiv.textContent = ""; // Clear status on new file selection
+        loader.style.display = "none";
+        convertBtn.disabled = false;
 
         if (this.files.length > 0) {
           fileListContainer.style.display = "block";
           for (let i = 0; i < this.files.length; i++) {
             const file = this.files[i];
+            const listItem = document.createElement("li");
             if (file.type === "image/png") {
-              const listItem = document.createElement("li");
               listItem.textContent = file.name;
-              selectedFilesList.appendChild(listItem);
             } else {
-              const listItem = document.createElement("li");
               listItem.textContent = `${file.name} (not a PNG, will be skipped)`;
               listItem.style.color = "orange";
-              selectedFilesList.appendChild(listItem);
             }
+            selectedFilesList.appendChild(listItem);
           }
         } else {
           fileListContainer.style.display = "none";
@@ -240,107 +240,196 @@
           return;
         }
 
-        statusDiv.textContent = "Processing...";
+        statusDiv.textContent = "Starting processing...";
         loader.style.display = "block";
         convertBtn.disabled = true;
-        fileListContainer.style.display = "none"; // Hide file list during processing
+        fileListContainer.style.display = "none";
 
         const { jsPDF } = window.jspdf;
         const zip = new JSZip();
         let pdfCount = 0;
-        let processedFileNames = []; // To keep track of files actually being processed as PDFs
+        let attemptedPngFileCount = 0;
 
         for (let i = 0; i < files.length; i++) {
           const file = files[i];
+          currentFileStatus = `Processing file: ${file.name} (${i + 1}/${
+            files.length
+          })`;
+          statusDiv.innerHTML = currentFileStatus;
+
           if (file.type !== "image/png") {
-            statusDiv.textContent = `Skipping non-PNG file: ${file.name}`;
-            await new Promise((resolve) => setTimeout(resolve, 50)); // small delay for UI update
+            console.warn(`Skipping non-PNG file: ${file.name}`);
+            // Optionally, briefly show in status or just rely on console
+            // statusDiv.textContent = `Skipping non-PNG: ${file.name}`;
+            // await new Promise(resolve => setTimeout(resolve, 1000)); // Show for a sec
             continue;
           }
 
-          processedFileNames.push(file.name);
-          statusDiv.textContent = `Processing ${file.name}... (${processedFileNames.length}/${files.length})`;
+          attemptedPngFileCount++;
+          console.log(`Processing file: ${file.name}`);
 
           try {
-            const imageBitmap = await createImageBitmap(file);
-            const imgWidth = imageBitmap.width;
-            const imgHeight = imageBitmap.height;
+            const arrayBuffer = await file.arrayBuffer();
 
+            console.log(`  Attempting UPNG.decode for ${file.name}`);
+            const decodedPng = UPNG.decode(arrayBuffer);
+            if (!decodedPng) {
+              console.error(`UPNG.decode failed for ${file.name}.`);
+              statusDiv.textContent = `Error decoding ${file.name}. Check console.`;
+              await new Promise((resolve) => setTimeout(resolve, 2000)); // Show error briefly
+              continue;
+            }
+            console.log(
+              `  UPNG.decode successful for ${file.name} (Width: ${decodedPng.width}, Height: ${decodedPng.height}).`
+            );
+
+            const imgWidth = decodedPng.width;
+            const imgHeight = decodedPng.height;
+
+            console.log(`  Attempting UPNG.toRGBA8 for ${file.name}`);
+            const rgba8Frames = UPNG.toRGBA8(decodedPng);
+            if (!rgba8Frames || rgba8Frames.length === 0 || !rgba8Frames[0]) {
+              console.error(
+                `UPNG.toRGBA8 failed for ${file.name}. Result:`,
+                rgba8Frames
+              );
+              statusDiv.textContent = `Error processing image data for ${file.name}. Check console.`;
+              await new Promise((resolve) => setTimeout(resolve, 2000));
+              continue;
+            }
+            const rgba8Data = rgba8Frames[0];
+            console.log(
+              `  UPNG.toRGBA8 successful for ${file.name} (Data byteLength: ${rgba8Data.byteLength}).`
+            );
+
+            console.log(`  Attempting UPNG.encode for ${file.name}`);
+            const encodedResult = UPNG.encode(
+              [rgba8Data],
+              imgWidth,
+              imgHeight,
+              0
+            );
+
+            let finalPngUint8Array;
+
+            if (encodedResult instanceof Uint8Array) {
+              finalPngUint8Array = encodedResult;
+              console.log(
+                `  UPNG.encode returned Uint8Array for ${file.name}, byteLength: ${finalPngUint8Array.byteLength}`
+              );
+            } else if (encodedResult instanceof ArrayBuffer) {
+              console.warn(
+                `  UPNG.encode returned ArrayBuffer for ${file.name}, byteLength: ${encodedResult.byteLength}. Converting to Uint8Array.`
+              );
+              finalPngUint8Array = new Uint8Array(encodedResult);
+            } else {
+              console.error(
+                `UPNG.encode returned an unexpected type for ${file.name}. Result:`,
+                encodedResult
+              );
+              statusDiv.textContent = `Error encoding ${file.name}. Check console.`;
+              await new Promise((resolve) => setTimeout(resolve, 2000));
+              continue;
+            }
+
+            if (!finalPngUint8Array || finalPngUint8Array.byteLength === 0) {
+              console.error(`Processed PNG data is empty for ${file.name}.`);
+              statusDiv.textContent = `Processed PNG data for ${file.name} is empty.`;
+              await new Promise((resolve) => setTimeout(resolve, 2000));
+              continue;
+            }
+
+            if (finalPngUint8Array.byteLength > 8) {
+              const signatureBytes = finalPngUint8Array.slice(0, 8);
+              const signatureHex = Array.from(signatureBytes)
+                .map((b) => b.toString(16).padStart(2, "0"))
+                .join(" ");
+              console.log(
+                `  PNG Signature for ${file.name} (from Uint8Array): ${signatureHex}`
+              );
+              if (signatureHex !== "89 50 4e 47 0d 0a 1a 0a") {
+                console.warn(
+                  `  PNG signature mismatch for ${file.name}! Data may not be a valid PNG.`
+                );
+                // statusDiv.textContent = `Warning: PNG signature mismatch for ${file.name}.`;
+                // await new Promise(resolve => setTimeout(resolve, 1500));
+              }
+            } else {
+              console.error(
+                `Encoded PNG data too short for ${file.name}. ByteLength: ${finalPngUint8Array.byteLength}`
+              );
+              statusDiv.textContent = `Encoded PNG data for ${file.name} is too short.`;
+              await new Promise((resolve) => setTimeout(resolve, 2000));
+              continue;
+            }
+
+            console.log(
+              `  Attempting jsPDF.addImage for ${file.name} with Uint8Array.`
+            );
             const pdf = new jsPDF({
               orientation: imgWidth > imgHeight ? "l" : "p",
               unit: "px",
               format: [imgWidth, imgHeight],
             });
 
-            const reader = new FileReader();
-            const promise = new Promise((resolve, reject) => {
-              reader.onload = function (event) {
-                const imgData = event.target.result;
-                pdf.addImage(imgData, "PNG", 0, 0, imgWidth, imgHeight);
-                const pdfOutput = pdf.output("blob");
-                const pdfFileName =
-                  file.name.substring(0, file.name.lastIndexOf(".")) + ".pdf";
-                zip.file(pdfFileName, pdfOutput);
-                pdfCount++;
-                resolve();
-              };
-              reader.onerror = reject;
-            });
-            reader.readAsDataURL(file);
-            await promise;
+            pdf.addImage(finalPngUint8Array, "PNG", 0, 0, imgWidth, imgHeight);
+            console.log(`  jsPDF.addImage successful for ${file.name}`);
+
+            const pdfOutput = pdf.output("blob");
+            const pdfFileName =
+              file.name.substring(0, file.name.lastIndexOf(".")) + ".pdf";
+            zip.file(pdfFileName, pdfOutput);
+            pdfCount++;
           } catch (error) {
-            console.error("Error processing file:", file.name, error);
-            statusDiv.innerHTML += `<br>Error converting ${file.name}: ${error.message}`; // Use innerHTML for line breaks
+            console.error(`Error processing file ${file.name}:`, error);
+            statusDiv.textContent = `Error with ${file.name}. Check console.`;
+            if (error.stack) {
+              console.error("Stack trace:", error.stack);
+            }
+            await new Promise((resolve) => setTimeout(resolve, 2000)); // Show error briefly
           }
+          // Small pause for UI to update if needed, though less critical now with fewer UI updates
+          // await new Promise(resolve => setTimeout(resolve, 10));
         }
 
-        // Update status based on actual PNGs processed
-        const actualPngFilesCount = processedFileNames.length;
-        if (pdfCount > 0 && pdfCount === actualPngFilesCount) {
-          statusDiv.textContent = `Generating ZIP file with ${pdfCount} PDF(s)...`;
-        } else if (pdfCount > 0 && pdfCount < actualPngFilesCount) {
-          statusDiv.textContent = `Successfully converted ${pdfCount} of ${actualPngFilesCount} PNGs. Generating ZIP file...`;
-        } else if (actualPngFilesCount > 0 && pdfCount === 0) {
-          statusDiv.textContent = `Could not convert any of the ${actualPngFilesCount} selected PNG files.`;
-          loader.style.display = "none";
-          convertBtn.disabled = false;
-          pngUploadInput.value = ""; // Clear file input
-          selectedFilesList.innerHTML = ""; // Clear selected files list
-          fileListContainer.style.display = "none";
-          return;
-        } else {
-          // No PNGs were selected or found
-          statusDiv.textContent = "No valid PNG files were processed.";
-          loader.style.display = "none";
-          convertBtn.disabled = false;
-          pngUploadInput.value = ""; // Clear file input
-          selectedFilesList.innerHTML = ""; // Clear selected files list
-          fileListContainer.style.display = "none";
-          return;
-        }
+        loader.style.display = "none"; // Hide loader before final messages
 
         if (pdfCount > 0) {
+          statusDiv.textContent = `Processing complete. Generating ZIP file with ${pdfCount} PDF(s)...`;
+          console.log(`Generating ZIP file with ${pdfCount} PDF(s)...`);
           try {
-            const zipBlob = await zip.generateAsync({ type: "blob" });
+            const zipBlob = await zip.generateAsync({
+              type: "blob",
+              compression: "DEFLATE",
+              compressionOptions: { level: 6 },
+            });
             const link = document.createElement("a");
             link.href = URL.createObjectURL(zipBlob);
-            link.download = "converted_pngs.zip";
+            link.download = "converted_pngs.zip"; // Changed filename
             document.body.appendChild(link);
             link.click();
             document.body.removeChild(link);
             URL.revokeObjectURL(link.href);
-            statusDiv.textContent = `Successfully converted ${pdfCount} PNG(s).`;
+            statusDiv.textContent = `Successfully downloaded ZIP with ${pdfCount} PDF(s).`;
+            console.log(`Successfully downloaded ZIP.`);
           } catch (error) {
             console.error("Error generating ZIP:", error);
-            statusDiv.textContent = "Error generating ZIP file.";
+            statusDiv.textContent = `Error generating ZIP file. ${pdfCount} PDF(s) were created but not zipped.`;
           }
+        } else if (attemptedPngFileCount > 0) {
+          statusDiv.textContent =
+            "No PNG files were successfully converted into PDFs. Check console for errors.";
+          console.log("No PNG files were successfully converted into PDFs.");
+        } else {
+          statusDiv.textContent =
+            "No valid PNG files were selected for processing.";
+          console.log("No valid PNG files were selected for processing.");
         }
 
-        loader.style.display = "none";
         convertBtn.disabled = false;
         pngUploadInput.value = ""; // Clear file input
         selectedFilesList.innerHTML = ""; // Clear selected files list
-        // fileListContainer.style.display = 'none'; // Keep it hidden or clear status
+        fileListContainer.style.display = "none";
       });
     </script>
   </body>
